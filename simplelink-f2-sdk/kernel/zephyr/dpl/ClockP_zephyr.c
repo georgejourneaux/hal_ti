@@ -31,7 +31,7 @@
  */
 
 /*
- *  ======== ClockP_freertos.c ========
+ *  ======== ClockP_zephyr.c ========
  */
 
 #include <stdint.h>
@@ -41,12 +41,11 @@
 #include <zephyr/kernel.h>
 
 #include <ti/drivers/dpl/ClockP.h>
-#include <ti/drivers/dpl/HwiP.h>
 
 #define US_PER_S (1000000UL)
 #define CLOCKP_TICKPERIOD_US (US_PER_S / CONFIG_SYS_CLOCK_TICKS_PER_SEC)
 
-typedef struct ClockP_Obj
+typedef struct _ClockP_Obj
 {
     struct k_timer timer;
 	ClockP_Fxn clock_fxn;
