@@ -69,8 +69,9 @@ extern "C" {
  *  BIOS 6.x: 40
  *  BIOS 7.x: 36
  *  FreeRTOS: 68
+ *  Zephyr  : 105
  */
-#define ClockP_STRUCT_SIZE (68)
+#define ClockP_STRUCT_SIZE (105)
 
 /*!
  *  @brief    ClockP structure.
