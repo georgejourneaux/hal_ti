@@ -125,12 +125,12 @@ ClockP_Handle ClockP_create(ClockP_Fxn clockFxn, uint32_t timeout, ClockP_Params
 void ClockP_delete(ClockP_Handle handle)
 {
     ClockP_Struct* clockP = (ClockP_Struct*)handle;
-    if(clockP == NULL) {
+    if(handle == NULL) {
         return;
     }
 
     ClockP_destruct(clockP);
-    k_free(clockP);
+    k_free(handle);
 }
 
 /*

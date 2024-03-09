@@ -30,36 +30,42 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- *  ======== MutexP_freertos.c ========
+ *  ======== MutexP_zephyr.c ========
  */
 
 #include <ti/drivers/dpl/MutexP.h>
 
-#include <FreeRTOS.h>
-#include <semphr.h>
-#include <queue.h>
+#include <zephyr/kernel.h>
 
-extern void vQueueAddToRegistryWrapper(QueueHandle_t xQueue, const char *pcQueueName);
-extern void vQueueUnregisterQueueWrapper(QueueHandle_t xQueue);
 
 /*
  *  ======== MutexP_construct ========
  */
 MutexP_Handle MutexP_construct(MutexP_Struct *handle, MutexP_Params *params)
 {
-    SemaphoreHandle_t sem = NULL;
+	struct k_mutex* mutexP = (struct k_mutex*)handle;
 
-#if (configSUPPORT_STATIC_ALLOCATION == 1)
-    sem = xSemaphoreCreateRecursiveMutexStatic((StaticSemaphore_t *)handle);
+    if (handle == NULL) {
+		return NULL;
+	}
 
-    if (sem != NULL)
-    {
-        /* Register Mutex for kernel aware debugging */
-        vQueueAddToRegistryWrapper(sem, "MutexP");
+    if(k_mutex_init(mutexP) != 0) {
+        return NULL;
     }
-#endif
 
-    return ((MutexP_Handle)sem);
+    return ((MutexP_Handle)mutexP);
+}
+
+/*
+ *  ======== MutexP_destruct ========
+ */
+void MutexP_destruct(MutexP_Struct *mutexP)
+{
+    if(mutexP == NULL) {
+        return;
+    }
+
+    k_mutex_init(mutexP);
 }
 
 /*
@@ -67,23 +73,12 @@ MutexP_Handle MutexP_construct(MutexP_Struct *handle, MutexP_Params *params)
  */
 MutexP_Handle MutexP_create(MutexP_Params *params)
 {
-    SemaphoreHandle_t sem = NULL;
-
-    /*
-     *  NOTE:  Documentation in semphr.h says that configUSE_RECURSIVE_MUTEXES
-     *  must be set to 1 in FreeRTOSConfig.h  for this to be available, but
-     *  the xSemaphore recursive calls are inside a configUSE_RECURSIVE_MUTEXES
-     *  block.
-     */
-    sem = xSemaphoreCreateRecursiveMutex();
-
-    if (sem != NULL)
-    {
-        /* Register Mutex for kernel aware debugging */
-        vQueueAddToRegistryWrapper(sem, "MutexP");
+    MutexP_Struct* handle = k_malloc(MutexP_STRUCT_SIZE)
+    if(MutexP_construct(handle, params) == NULL) {
+        k_free(handle);
     }
 
-    return ((MutexP_Handle)sem);
+    return handle;
 }
 
 /*
@@ -91,32 +86,13 @@ MutexP_Handle MutexP_create(MutexP_Params *params)
  */
 void MutexP_delete(MutexP_Handle handle)
 {
-    /* Unregister Mutex for kernel aware debugging */
-    vQueueUnregisterQueueWrapper((SemaphoreHandle_t)handle);
+    struct k_mutex* mutexP = (struct k_mutex*)handle;
+    if(handle == NULL) {
+        return;
+    }
 
-    vSemaphoreDelete((SemaphoreHandle_t)handle);
-}
-
-/*
- *  ======== MutexP_destruct ========
- */
-void MutexP_destruct(MutexP_Struct *mutP)
-{
-    /* Unregister Mutex for kernel aware debugging */
-    vQueueUnregisterQueueWrapper((SemaphoreHandle_t)mutP);
-}
-
-/*
- *  ======== MutexP_lock ========
- */
-uintptr_t MutexP_lock(MutexP_Handle handle)
-{
-    SemaphoreHandle_t xMutex = (SemaphoreHandle_t)handle;
-
-    /* Retry every 10 ticks */
-    while (xSemaphoreTakeRecursive(xMutex, (TickType_t)10) == pdFALSE) {}
-
-    return (0);
+    MutexP_destruct(mutexP);
+    k_free(handle);
 }
 
 /*
@@ -127,21 +103,32 @@ void MutexP_Params_init(MutexP_Params *params)
     params->callback = NULL;
 }
 
-#if (configSUPPORT_STATIC_ALLOCATION == 1)
 /*
- *  ======== MutexP_staticObjectSize ========
+ *  ======== MutexP_lock ========
  */
-size_t MutexP_staticObjectSize(void)
+uintptr_t MutexP_lock(MutexP_Handle handle)
 {
-    return (sizeof(StaticSemaphore_t));
+    struct k_mutex* mutexP = (struct k_mutex*)handle;
+    if(handle == NULL) {
+        return 0;
+    }
+
+	k_mutex_lock(mutexP, K_FOREVER);
+
+    return 0;
 }
-#endif
 
 /*
  *  ======== MutexP_unlock ========
  */
 void MutexP_unlock(MutexP_Handle handle, uintptr_t key)
 {
-    SemaphoreHandle_t xMutex = (SemaphoreHandle_t)handle;
-    xSemaphoreGiveRecursive(xMutex);
+    struct k_mutex* mutexP = (struct k_mutex*)handle;
+    if(handle == NULL) {
+        return;
+    }
+
+	k_mutex_unlock(mutexP);
+
+    return;
 }

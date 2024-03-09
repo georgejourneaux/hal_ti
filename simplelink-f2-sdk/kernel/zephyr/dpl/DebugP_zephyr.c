@@ -44,9 +44,7 @@
  */
 void _DebugP_assert(int expression, const char *file, int line)
 {
-#if (__ASSERT_ON != 0)
     __ASSERT_NO_MSG(expression);
-#endif
 }
 
 /*

@@ -71,8 +71,9 @@ extern "C" {
  *  BIOS 6.x: 40
  *  BIOS 7.x: 40
  *  FreeRTOS: 80
+ *  Zephyr  : 32
  */
-#define MutexP_STRUCT_SIZE (80)
+#define MutexP_STRUCT_SIZE (32)
 
 /*!
  *  @brief    MutexP structure.
