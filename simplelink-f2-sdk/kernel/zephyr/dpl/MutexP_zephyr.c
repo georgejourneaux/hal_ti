@@ -45,7 +45,7 @@ MutexP_Handle MutexP_construct(MutexP_Struct *handle, MutexP_Params *params)
 {
 	struct k_mutex* mutexP = (struct k_mutex*)handle;
 
-    if (handle == NULL) {
+    if (mutexP == NULL) {
 		return NULL;
 	}
 
@@ -73,12 +73,12 @@ void MutexP_destruct(MutexP_Struct *mutexP)
  */
 MutexP_Handle MutexP_create(MutexP_Params *params)
 {
-    MutexP_Struct* handle = k_malloc(MutexP_STRUCT_SIZE)
+    MutexP_Struct* handle = k_malloc(MutexP_STRUCT_SIZE);
     if(MutexP_construct(handle, params) == NULL) {
         k_free(handle);
     }
 
-    return handle;
+    return ((MutexP_Handle)handle);
 }
 
 /*
@@ -87,12 +87,12 @@ MutexP_Handle MutexP_create(MutexP_Params *params)
 void MutexP_delete(MutexP_Handle handle)
 {
     struct k_mutex* mutexP = (struct k_mutex*)handle;
-    if(handle == NULL) {
+    if(mutexP == NULL) {
         return;
     }
 
     MutexP_destruct(mutexP);
-    k_free(handle);
+    k_free(mutexP);
 }
 
 /*
@@ -109,7 +109,7 @@ void MutexP_Params_init(MutexP_Params *params)
 uintptr_t MutexP_lock(MutexP_Handle handle)
 {
     struct k_mutex* mutexP = (struct k_mutex*)handle;
-    if(handle == NULL) {
+    if(mutexP == NULL) {
         return 0;
     }
 
@@ -124,7 +124,7 @@ uintptr_t MutexP_lock(MutexP_Handle handle)
 void MutexP_unlock(MutexP_Handle handle, uintptr_t key)
 {
     struct k_mutex* mutexP = (struct k_mutex*)handle;
-    if(handle == NULL) {
+    if(mutexP == NULL) {
         return;
     }
 

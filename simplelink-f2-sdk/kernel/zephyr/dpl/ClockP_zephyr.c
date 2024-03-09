@@ -66,7 +66,7 @@ ClockP_Handle ClockP_construct(ClockP_Struct *clockP, ClockP_Fxn clockFxn, uint3
 	ClockP_Obj* clockPObj = (ClockP_Obj*)clockP;
     ClockP_Params ClockP_defaultParams;
 
-	if (clockP == NULL) {
+	if (clockPObj == NULL) {
 		return NULL;
 	}
 
@@ -88,7 +88,7 @@ ClockP_Handle ClockP_construct(ClockP_Struct *clockP, ClockP_Fxn clockFxn, uint3
 		ClockP_start(clockPObj);
 	}
 	
-	return ((ClockP_Handle)clockP);
+	return ((ClockP_Handle)clockPObj);
 }
 
 /*
@@ -97,7 +97,7 @@ ClockP_Handle ClockP_construct(ClockP_Struct *clockP, ClockP_Fxn clockFxn, uint3
 void ClockP_destruct(ClockP_Struct *clockP)
 {
     ClockP_Obj* clockPObj = (ClockP_Obj*)clockP->data;
-    if(clockP == NULL) {
+    if(clockPObj == NULL) {
         return;
     }
 
@@ -116,7 +116,11 @@ void ClockP_destruct(ClockP_Struct *clockP)
 ClockP_Handle ClockP_create(ClockP_Fxn clockFxn, uint32_t timeout, ClockP_Params *params)
 {
     ClockP_Struct* clockP = k_malloc(ClockP_STRUCT_SIZE);
-    return ClockP_create(clockP, timeout, params);
+    if(ClockP_construct(clockP, clockFxn, timeout, params) == NULL) {
+        k_free(clockP);
+    }
+
+	return ((ClockP_Handle)clockP);
 }
 
 /*
@@ -125,7 +129,7 @@ ClockP_Handle ClockP_create(ClockP_Fxn clockFxn, uint32_t timeout, ClockP_Params
 void ClockP_delete(ClockP_Handle handle)
 {
     ClockP_Struct* clockP = (ClockP_Struct*)handle;
-    if(handle == NULL) {
+    if(clockP == NULL) {
         return;
     }
 
@@ -164,7 +168,7 @@ uint32_t ClockP_getSystemTicks(void)
 uint32_t ClockP_getTimeout(ClockP_Handle handle)
 {
     ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
-    if(handle == NULL) {
+    if(clockPObj == NULL) {
         return 0;
     }
 
@@ -177,7 +181,7 @@ uint32_t ClockP_getTimeout(ClockP_Handle handle)
 bool ClockP_isActive(ClockP_Handle handle)
 {
     ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
-    if(handle == NULL) {
+    if(clockPObj == NULL) {
         return false;
     }
 
@@ -200,7 +204,7 @@ void ClockP_Params_init(ClockP_Params *params)
 void ClockP_setTimeout(ClockP_Handle handle, uint32_t timeout)
 {
     ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
-    if(handle == NULL) {
+    if(clockPObj == NULL) {
         return;
     }
 
@@ -213,7 +217,7 @@ void ClockP_setTimeout(ClockP_Handle handle, uint32_t timeout)
 void ClockP_setPeriod(ClockP_Handle handle, uint32_t period)
 {
     ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
-    if(handle == NULL) {
+    if(clockPObj == NULL) {
         return;
     }
 
@@ -226,7 +230,7 @@ void ClockP_setPeriod(ClockP_Handle handle, uint32_t period)
 void ClockP_start(ClockP_Handle handle)
 {
     ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
-    if(handle == NULL) {
+    if(clockPObj == NULL) {
         return;
     }
 
@@ -240,7 +244,7 @@ void ClockP_start(ClockP_Handle handle)
 void ClockP_stop(ClockP_Handle handle)
 {
     ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
-    if(handle == NULL) {
+    if(clockPObj == NULL) {
         return;
     }
 
@@ -269,7 +273,10 @@ void ClockP_sleep(uint32_t sec)
  */
 static void expiryCallbackFunction(struct k_timer *timer_id)
 {
-	ClockP_Obj *obj = (ClockP_Obj *)k_timer_user_data_get(timer_id);
+	ClockP_Obj* clockPObj = (ClockP_Obj*)k_timer_user_data_get(timer_id);
+    if(clockPObj == NULL) {
+        return;
+    }
 	
-	obj->clock_fxn(obj->arg);
+	clockPObj->clock_fxn(clockPObj->arg);
 }
