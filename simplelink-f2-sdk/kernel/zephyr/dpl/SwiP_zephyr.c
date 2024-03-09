@@ -30,7 +30,7 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- *  ======== SwiP_freertos.c ========
+ *  ======== SwiP_zephyr.c ========
  */
 
 #include <stdbool.h>
@@ -197,7 +197,7 @@ SwiP_Handle SwiP_create(SwiP_Fxn swiFxn, SwiP_Params *params)
     SwiP_Handle handle;
     SwiP_Handle retHandle;
 
-    handle = (SwiP_Handle)malloc(sizeof(SwiP_Obj));
+    handle = (SwiP_Handle)k_malloc(sizeof(SwiP_Obj));
 
     /*
      * Even though SwiP_construct will check handle for NULL and not do
@@ -210,7 +210,7 @@ SwiP_Handle SwiP_create(SwiP_Fxn swiFxn, SwiP_Params *params)
         retHandle = SwiP_construct((SwiP_Struct *)handle, swiFxn, params);
         if (retHandle == NULL)
         {
-            free(handle);
+            k_free(handle);
             handle = NULL;
         }
     }
@@ -243,7 +243,7 @@ void SwiP_delete(SwiP_Handle handle)
 {
     SwiP_destruct((SwiP_Struct *)handle);
 
-    free(handle);
+    k_free(handle);
 }
 
 /*
