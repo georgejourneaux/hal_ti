@@ -41,15 +41,32 @@
  */
 void QueueP_init(QueueP_Obj *obj)
 {
-    obj->elem.next = obj->elem.prev = &(obj->elem);
+    obj->elem.prev = &(obj->elem);
+    obj->elem.next = obj->elem.prev;
 }
 
 /*
- *  ======== QueueP_empty ========
+ *  ======== QueueP_head ========
  */
-bool QueueP_empty(QueueP_Obj *obj)
+uintptr_t QueueP_head(QueueP_Obj *obj)
 {
-    return (obj->elem.next == &(obj->elem));
+    return ((uintptr_t)(obj->elem.next));
+}
+
+/*
+ *  ======== next ========
+ */
+uintptr_t QueueP_next(QueueP_Elem *qelem)
+{
+    return ((uintptr_t)qelem->next);
+}
+
+/*
+ *  ======== QueueP_prev ========
+ */
+uintptr_t QueueP_prev(QueueP_Elem *qelem)
+{
+    return ((uintptr_t)qelem->prev);
 }
 
 /*
@@ -73,6 +90,48 @@ uintptr_t QueueP_get(QueueP_Obj *obj)
 }
 
 /*
+ *  ======== QueueP_put ========
+ */
+void QueueP_put(QueueP_Obj *obj, QueueP_Elem *elem)
+{
+    uintptr_t key;
+
+    key = HwiP_disable();
+
+    elem->next           = &(obj->elem);
+    elem->prev           = obj->elem.prev;
+    obj->elem.prev->next = elem;
+    obj->elem.prev       = elem;
+
+    HwiP_restore(key);
+}
+
+/*
+ *  ======== QueueP_remove ========
+ */
+void QueueP_remove(QueueP_Elem *qelem)
+{
+#if defined(__IAR_SYSTEMS_ICC__)
+    QueueP_Elem *temp;
+    temp              = qelem->next;
+    qelem->prev->next = temp;
+    temp              = qelem->prev;
+    qelem->next->prev = temp;
+#else
+    qelem->prev->next = qelem->next;
+    qelem->next->prev = qelem->prev;
+#endif
+}
+
+/*
+ *  ======== QueueP_empty ========
+ */
+bool QueueP_empty(QueueP_Obj *obj)
+{
+    return (obj->elem.next == &(obj->elem));
+}
+
+/*
  *  ======== QueueP_getTail ========
  */
 uintptr_t QueueP_getTail(QueueP_Obj *obj)
@@ -93,14 +152,6 @@ uintptr_t QueueP_getTail(QueueP_Obj *obj)
 }
 
 /*
- *  ======== QueueP_head ========
- */
-uintptr_t QueueP_head(QueueP_Obj *obj)
-{
-    return ((uintptr_t)(obj->elem.next));
-}
-
-/*
  *  ======== elemClear ========
  */
 void QueueP_elemClear(QueueP_Elem *qelem)
@@ -114,39 +165,6 @@ void QueueP_elemClear(QueueP_Elem *qelem)
 void QueueP_insert(QueueP_Elem *qelem, QueueP_Elem *elem)
 {
     QueueP_put((QueueP_Obj *)qelem, elem);
-}
-
-/*
- *  ======== next ========
- */
-uintptr_t QueueP_next(QueueP_Elem *qelem)
-{
-    return ((uintptr_t)qelem->next);
-}
-
-/*
- *  ======== QueueP_prev ========
- */
-uintptr_t QueueP_prev(QueueP_Elem *qelem)
-{
-    return ((uintptr_t)qelem->prev);
-}
-
-/*
- *  ======== QueueP_put ========
- */
-void QueueP_put(QueueP_Obj *obj, QueueP_Elem *elem)
-{
-    uintptr_t key;
-
-    key = HwiP_disable();
-
-    elem->next           = &(obj->elem);
-    elem->prev           = obj->elem.prev;
-    obj->elem.prev->next = elem;
-    obj->elem.prev       = elem;
-
-    HwiP_restore(key);
 }
 
 /*
@@ -164,23 +182,6 @@ void QueueP_putHead(QueueP_Obj *obj, QueueP_Elem *elem)
     obj->elem.next       = elem;
 
     HwiP_restore(key);
-}
-
-/*
- *  ======== QueueP_remove ========
- */
-void QueueP_remove(QueueP_Elem *qelem)
-{
-#if defined(__IAR_SYSTEMS_ICC__)
-    QueueP_Elem *temp;
-    temp              = qelem->next;
-    qelem->prev->next = temp;
-    temp              = qelem->prev;
-    qelem->next->prev = temp;
-#else
-    qelem->prev->next = qelem->next;
-    qelem->next->prev = qelem->prev;
-#endif
 }
 
 /*
