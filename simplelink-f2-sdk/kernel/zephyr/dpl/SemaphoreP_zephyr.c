@@ -30,76 +30,27 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- *  ======== SemaphoreP_freertos.c ========
+ *  ======== SemaphoreP_zephyr.c ========
  */
 #include <ti/drivers/dpl/SemaphoreP.h>
-#include <ti/drivers/dpl/ClockP.h>
-#include <ti/drivers/dpl/HwiP.h>
 
-#include <FreeRTOS.h>
-#include <semphr.h>
-#include <queue.h>
-
-#define FREERTOS_TICKPERIOD_US (1000000 / configTICK_RATE_HZ)
-
-/*
- *  Maximum count for a semaphore.
- */
-#define MAXCOUNT 0xffff
-
-extern void vQueueAddToRegistryWrapper(QueueHandle_t xQueue, const char *pcQueueName);
-extern void vQueueUnregisterQueueWrapper(QueueHandle_t xQueue);
+#include <zephyr/kernel.h>
 
 /*
  *  ======== SemaphoreP_construct ========
  */
 SemaphoreP_Handle SemaphoreP_construct(SemaphoreP_Struct *handle, unsigned int count, SemaphoreP_Params *params)
 {
-    SemaphoreHandle_t sem = NULL;
+    struct k_sem* semaphoreP = (struct k_sem*)handle;
+    if (semaphoreP == NULL) {
+		return NULL;
+	}
 
-#if (configSUPPORT_STATIC_ALLOCATION == 1)
-    SemaphoreP_Params semParams;
-    if (params == NULL)
-    {
-        params = &semParams;
-        SemaphoreP_Params_init(params);
+    if(k_sem_init(semaphoreP, count, ((params->mode == SemaphoreP_Mode_BINARY) ? 1 : K_SEM_MAX_LIMIT)) != 0) {
+        return NULL;
     }
 
-    if (params->mode == SemaphoreP_Mode_COUNTING)
-    {
-    #if (configUSE_COUNTING_SEMAPHORES == 1)
-        /*
-         *  The size of the semaphore queue is not dependent on MAXCOUNT.
-         *
-         *  FreeRTOS xSemaphoreCreateCounting() appears from the
-         *  code in xQueueCreateCountingSemaphore() to create
-         *  a queue of length maxCount, where maxCount is the
-         *  maximum count that the semaphore should ever reach.
-         *  However, the queue item size (queueSEMAPHORE_QUEUE_ITEM_LENGTH),
-         *  is 0, so no actual memoory is allocated for the queue items.
-         *  Therefore we can pass any non-zero number as the maximum
-         *  semaphore count.
-         */
-        sem = xSemaphoreCreateCountingStatic((UBaseType_t)MAXCOUNT, (UBaseType_t)count, (StaticSemaphore_t *)handle);
-    #endif
-    }
-    else
-    {
-        sem = xSemaphoreCreateBinaryStatic((StaticSemaphore_t *)handle);
-        if ((sem != NULL) && (count != 0))
-        {
-            xSemaphoreGive(sem);
-        }
-    }
-
-    if (sem != NULL)
-    {
-        /* Register Semaphore for kernel aware debugging */
-        vQueueAddToRegistryWrapper(sem, "SemaphoreP");
-    }
-#endif
-
-    return ((SemaphoreP_Handle)sem);
+    return ((SemaphoreP_Handle)semaphoreP);
 }
 
 /*
@@ -107,106 +58,12 @@ SemaphoreP_Handle SemaphoreP_construct(SemaphoreP_Struct *handle, unsigned int c
  */
 SemaphoreP_Handle SemaphoreP_constructBinary(SemaphoreP_Struct *handle, unsigned int count)
 {
-    SemaphoreHandle_t sem = NULL;
+    SemaphoreP_Params params = {
+        .callback == NULL,
+        .mode = SemaphoreP_Mode_BINARY
+    };
 
-#if (configSUPPORT_STATIC_ALLOCATION == 1)
-    sem = xSemaphoreCreateBinaryStatic((StaticSemaphore_t *)handle);
-    if ((sem != NULL) && (count != 0))
-    {
-        xSemaphoreGive(sem);
-    }
-
-    if (sem != NULL)
-    {
-        /* Register Semaphore for kernel aware debugging */
-        vQueueAddToRegistryWrapper(sem, "SemaphoreP");
-    }
-#endif
-
-    return ((SemaphoreP_Handle)sem);
-}
-
-/*
- *  ======== SemaphoreP_create ========
- */
-SemaphoreP_Handle SemaphoreP_create(unsigned int count, SemaphoreP_Params *params)
-{
-    SemaphoreHandle_t sem = NULL;
-    SemaphoreP_Params semParams;
-
-    if (params == NULL)
-    {
-        params = &semParams;
-        SemaphoreP_Params_init(params);
-    }
-
-    if (params->mode == SemaphoreP_Mode_COUNTING)
-    {
-#if (configUSE_COUNTING_SEMAPHORES == 1)
-        /*
-         *  The size of the semaphore queue is not dependent on MAXCOUNT.
-         *
-         *  FreeRTOS xSemaphoreCreateCounting() appears from the
-         *  code in xQueueCreateCountingSemaphore() to create
-         *  a queue of length maxCount, where maxCount is the
-         *  maximum count that the semaphore should ever reach.
-         *  However, the queue item size (queueSEMAPHORE_QUEUE_ITEM_LENGTH),
-         *  is 0, so no actual memoory is allocated for the queue items.
-         *  Therefore we can pass any non-zero number as the maximum
-         *  semaphore count.
-         */
-        sem = xSemaphoreCreateCounting((UBaseType_t)MAXCOUNT, (UBaseType_t)count);
-#endif
-    }
-    else
-    {
-        sem = xSemaphoreCreateBinary();
-        if ((sem != NULL) && (count != 0))
-        {
-            xSemaphoreGive(sem);
-        }
-    }
-
-    if (sem != NULL)
-    {
-        /* Register Semaphore for kernel aware debugging */
-        vQueueAddToRegistryWrapper(sem, "SemaphoreP");
-    }
-
-    return ((SemaphoreP_Handle)sem);
-}
-
-/*
- *  ======== SemaphoreP_createBinary ========
- */
-SemaphoreP_Handle SemaphoreP_createBinary(unsigned int count)
-{
-    SemaphoreHandle_t sem = NULL;
-
-    sem = xSemaphoreCreateBinary();
-    if ((sem != NULL) && (count != 0))
-    {
-        xSemaphoreGive(sem);
-    }
-
-    if (sem != NULL)
-    {
-        /* Register Semaphore for kernel aware debugging */
-        vQueueAddToRegistryWrapper(sem, "SemaphoreP");
-    }
-
-    return ((SemaphoreP_Handle)sem);
-}
-
-/*
- *  ======== SemaphoreP_delete ========
- */
-void SemaphoreP_delete(SemaphoreP_Handle handle)
-{
-    /* Unregister Semaphore for kernel aware debugging */
-    vQueueUnregisterQueueWrapper((SemaphoreHandle_t)handle);
-
-    vSemaphoreDelete((SemaphoreHandle_t)handle);
+    return SemaphoreP_construct(handle, count, params);
 }
 
 /*
@@ -214,8 +71,52 @@ void SemaphoreP_delete(SemaphoreP_Handle handle)
  */
 void SemaphoreP_destruct(SemaphoreP_Struct *semP)
 {
-    /* Unregister Semaphore for kernel aware debugging */
-    vQueueUnregisterQueueWrapper((SemaphoreHandle_t)semP);
+    struct k_sem* semaphoreP = (struct k_sem*)semP;
+    if (semaphoreP == NULL) {
+		return;
+	}
+
+	k_sem_reset(semaphoreP);
+}
+
+/*
+ *  ======== SemaphoreP_create ========
+ */
+SemaphoreP_Handle SemaphoreP_create(unsigned int count, SemaphoreP_Params *params)
+{
+    SemaphoreP_Struct* handle = k_malloc(SemaphoreP_STRUCT_SIZE);
+    if(SemaphoreP_construct(handle, count, params) == NULL) {
+        k_free(handle);
+    }
+
+    return ((SemaphoreP_Handle)handle);
+}
+
+/*
+ *  ======== SemaphoreP_createBinary ========
+ */
+SemaphoreP_Handle SemaphoreP_createBinary(unsigned int count)
+{
+    SemaphoreP_Struct* handle = k_malloc(SemaphoreP_STRUCT_SIZE);
+    if(SemaphoreP_constructBinary(handle, count) == NULL) {
+        k_free(handle);
+    }
+
+    return ((SemaphoreP_Handle)handle);
+}
+
+/*
+ *  ======== SemaphoreP_delete ========
+ */
+void SemaphoreP_delete(SemaphoreP_Handle handle)
+{
+    struct k_sem* semaphoreP = (struct k_sem*)handle;
+    if(semaphoreP == NULL) {
+        return;
+    }
+
+    SemaphoreP_destruct(semaphoreP);
+    k_free(semaphoreP);
 }
 
 /*
@@ -223,6 +124,10 @@ void SemaphoreP_destruct(SemaphoreP_Struct *semP)
  */
 void SemaphoreP_Params_init(SemaphoreP_Params *params)
 {
+    if(params == NULL) {
+        return;
+    }
+    
     params->mode     = SemaphoreP_Mode_COUNTING;
     params->callback = NULL;
 }
@@ -232,41 +137,17 @@ void SemaphoreP_Params_init(SemaphoreP_Params *params)
  */
 SemaphoreP_Status SemaphoreP_pend(SemaphoreP_Handle handle, uint32_t timeout)
 {
-    BaseType_t status;
-    TickType_t ticksFR;
-    uint32_t tickPeriod;
-    uint64_t timeUS;
-
-    /* in ISR? */
-    if (HwiP_inISR())
-    {
-        status = xSemaphoreTakeFromISR((SemaphoreHandle_t)handle, NULL);
+    struct k_sem* semaphoreP = (struct k_sem*)handle;
+    if(semaphoreP == NULL) {
+        return;
     }
 
-    /* else, pend with timeout */
-    else
+    if(k_sem_take(semaphoreP, timeout) == 0)
     {
-
-        /* if necessary, convert ClockP ticks to FreeRTOS ticks */
-        tickPeriod = ClockP_getSystemTickPeriod();
-        if (tickPeriod != FREERTOS_TICKPERIOD_US)
-        {
-            timeUS  = timeout * (uint64_t)tickPeriod;
-            ticksFR = (TickType_t)(timeUS / FREERTOS_TICKPERIOD_US);
-        }
-        else
-        {
-            ticksFR = timeout;
-        }
-        status = xSemaphoreTake((SemaphoreHandle_t)handle, ticksFR);
+        return SemaphoreP_OK;
     }
 
-    if (status == pdTRUE)
-    {
-        return (SemaphoreP_OK);
-    }
-
-    return (SemaphoreP_TIMEOUT);
+    return SemaphoreP_TIMEOUT;
 }
 
 /*
@@ -274,25 +155,10 @@ SemaphoreP_Status SemaphoreP_pend(SemaphoreP_Handle handle, uint32_t timeout)
  */
 void SemaphoreP_post(SemaphoreP_Handle handle)
 {
-    BaseType_t xHigherPriorityTaskWoken;
-
-    if (!HwiP_inISR())
-    {
-        /* Not in ISR */
-        xSemaphoreGive((SemaphoreHandle_t)handle);
+    struct k_sem* semaphoreP = (struct k_sem*)handle;
+    if(semaphoreP == NULL) {
+        return;
     }
-    else
-    {
-        xSemaphoreGiveFromISR((SemaphoreHandle_t)handle, &xHigherPriorityTaskWoken);
-    }
-}
 
-#if (configSUPPORT_STATIC_ALLOCATION == 1)
-/*
- *  ======== SemaphoreP_staticObjectSize ========
- */
-size_t SemaphoreP_staticObjectSize(void)
-{
-    return (sizeof(StaticSemaphore_t));
+    k_sem_give(semaphoreP);
 }
-#endif

@@ -72,8 +72,9 @@ extern "C" {
  *  BIOS 6.x: 28
  *  BIOS 7.x: 28
  *  FreeRTOS: 80
+ *  Zephyr  : 24
  */
-#define SemaphoreP_STRUCT_SIZE (80)
+#define SemaphoreP_STRUCT_SIZE (24)
 
 /*!
  *  @brief    SemaphoreP structure.

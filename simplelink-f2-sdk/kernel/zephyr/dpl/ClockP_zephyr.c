@@ -193,6 +193,10 @@ bool ClockP_isActive(ClockP_Handle handle)
  */
 void ClockP_Params_init(ClockP_Params *params)
 {
+    if(params == NULL) {
+        return false;
+    }
+
     params->startFlag = false;
     params->period    = 0;
     params->arg       = (uintptr_t)0;

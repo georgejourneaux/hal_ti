@@ -30,7 +30,7 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- *  ======== QueueP_freertos.c ========
+ *  ======== QueueP_zephyr.c ========
  */
 
 #include <ti/drivers/dpl/HwiP.h>

@@ -44,7 +44,6 @@
 MutexP_Handle MutexP_construct(MutexP_Struct *handle, MutexP_Params *params)
 {
 	struct k_mutex* mutexP = (struct k_mutex*)handle;
-
     if (mutexP == NULL) {
 		return NULL;
 	}
@@ -100,6 +99,9 @@ void MutexP_delete(MutexP_Handle handle)
  */
 void MutexP_Params_init(MutexP_Params *params)
 {
+    if(params == NULL) {
+        return;
+    }
     params->callback = NULL;
 }
 
