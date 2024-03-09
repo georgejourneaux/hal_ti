@@ -30,20 +30,22 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- *  ======== DebugP_freertos.c ========
+ *  ======== DebugP_zephyr.c ========
  */
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include <zephyr/kernel.h>
+
 /*
  *  ======== _DebugP_assert ========
  */
 void _DebugP_assert(int expression, const char *file, int line)
 {
-#if configASSERT_DEFINED
-    configASSERT(expression);
+#if (__ASSERT_ON != 0)
+    __ASSERT_NO_MSG(expression);
 #endif
 }
 
