@@ -33,8 +33,7 @@
  *  ======== TimerP.h ========
  */
 
-#ifndef kernel_freertos_dpl_TimerP__include
-#define kernel_freertos_dpl_TimerP__include
+#include <stdint.h>
 
 typedef void *TimerP_Handle;
 typedef void (*TimerP_Fxn)(uintptr_t arg);
@@ -87,4 +86,3 @@ uint64_t TimerP_getCount64(TimerP_Handle handle);
 void TimerP_dynamicStub(uintptr_t arg);
 uint32_t TimerP_getCurrentTick(TimerP_Handle handle, bool saveFlag);
 
-#endif /* kernel_freertos_dpl_TimerP__include */
