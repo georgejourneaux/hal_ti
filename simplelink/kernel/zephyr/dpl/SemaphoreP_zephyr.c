@@ -59,11 +59,11 @@ SemaphoreP_Handle SemaphoreP_construct(SemaphoreP_Struct *handle, unsigned int c
 SemaphoreP_Handle SemaphoreP_constructBinary(SemaphoreP_Struct *handle, unsigned int count)
 {
     SemaphoreP_Params params = {
-        .callback == NULL,
-        .mode = SemaphoreP_Mode_BINARY
+        .callback = NULL,
+        .mode = SemaphoreP_Mode_BINARY,
     };
 
-    return SemaphoreP_construct(handle, count, params);
+    return SemaphoreP_construct(handle, count, &params);
 }
 
 /*
@@ -110,7 +110,7 @@ SemaphoreP_Handle SemaphoreP_createBinary(unsigned int count)
  */
 void SemaphoreP_delete(SemaphoreP_Handle handle)
 {
-    struct k_sem* semaphoreP = (struct k_sem*)handle;
+    SemaphoreP_Struct* semaphoreP = (SemaphoreP_Struct*)handle;
     if(semaphoreP == NULL) {
         return;
     }
@@ -139,10 +139,12 @@ SemaphoreP_Status SemaphoreP_pend(SemaphoreP_Handle handle, uint32_t timeout)
 {
     struct k_sem* semaphoreP = (struct k_sem*)handle;
     if(semaphoreP == NULL) {
-        return;
+        return SemaphoreP_TIMEOUT;
     }
 
-    if(k_sem_take(semaphoreP, timeout) == 0)
+    k_timeout_t k_timeout = {.ticks = timeout};
+
+    if(k_sem_take(semaphoreP, k_timeout) == 0)
     {
         return SemaphoreP_OK;
     }

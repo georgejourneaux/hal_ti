@@ -16,7 +16,6 @@ zephyr_library_sources(
   # Required functions to support the TI Power module
   driverlib/sys_ctrl.c
   driverlib/osc.c
-  driverlib/driverlib_release.c
   # Required for newer HAL TI >= 4.40 (for PRCMPowerDomainsAllOn)
   driverlib/prcm.c
   )

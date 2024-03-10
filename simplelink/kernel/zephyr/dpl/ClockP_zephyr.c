@@ -43,7 +43,7 @@
 #include <ti/drivers/dpl/ClockP.h>
 
 #define US_PER_S (1000000UL)
-#define CLOCKP_TICKPERIOD_US (US_PER_S / CONFIG_SYS_CLOCK_TICKS_PER_SEC)
+#define CLOCKP_TICK_PERIOD (US_PER_S / CONFIG_SYS_CLOCK_TICKS_PER_SEC)
 
 typedef struct _ClockP_Obj
 {
@@ -78,7 +78,7 @@ ClockP_Handle ClockP_construct(ClockP_Struct *clockP, ClockP_Fxn clockFxn, uint3
 	clockPObj->clock_fxn = clockFxn;
 	clockPObj->arg = params->arg;
 	clockPObj->period = params->period;
-	obclockPObjj->timeout = timeout;
+	clockPObj->timeout = timeout;
 	clockPObj->active = false;
 	
 	k_timer_init(&clockPObj->timer, expiryCallbackFunction, NULL);
@@ -194,7 +194,7 @@ bool ClockP_isActive(ClockP_Handle handle)
 void ClockP_Params_init(ClockP_Params *params)
 {
     if(params == NULL) {
-        return false;
+        return;
     }
 
     params->startFlag = false;
@@ -269,7 +269,7 @@ void ClockP_usleep(uint32_t usec)
  */
 void ClockP_sleep(uint32_t sec)
 {
-    k_sleep(K_SECONDS(sec))
+    k_sleep(K_SECONDS(sec));
 }
 
 /*
