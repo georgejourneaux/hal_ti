@@ -645,7 +645,7 @@ const ccfg_t __ccfg =
 #elif defined(__llvm__)
 const ccfg_t __ccfg __attribute__((section(".ccfg"), retain)) =
 #else
-const ccfg_t __ccfg __attribute__((section(".ccfg"))) __attribute__((used)) =
+const ccfg_t __ti_ccfg_section __ccfg =
 #endif
 {                                     // Mapped to address
     DEFAULT_CCFG_SIZE_AND_DIS_FLAGS     , // 0x50000000 (0x50000000 maps to the
