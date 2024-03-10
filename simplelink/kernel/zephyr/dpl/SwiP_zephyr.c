@@ -41,6 +41,8 @@
 #include <ti/drivers/dpl/HwiP.h>
 #include <ti/drivers/dpl/SwiP.h>
 
+#include <zephyr/kernel.h>
+
 #include "QueueP.h"
 
 /* Lowest priority interrupt */
