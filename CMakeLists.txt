@@ -1,5 +1,1 @@
-if(CONFIG_HAS_CC13XX_CC26XX_SDK)
-    add_subdirectory(simplelink-f2)
-else()
-    add_subdirectory(simplelink)
-endif()
+add_subdirectory(simplelink)
