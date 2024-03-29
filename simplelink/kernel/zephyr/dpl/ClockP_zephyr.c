@@ -1,20 +1,53 @@
 /*
- * Copyright (c) 2017, Texas Instruments Incorporated
+ * Copyright (c) 2015-2021, Texas Instruments Incorporated
+ * All rights reserved.
  *
- * SPDX-License-Identifier: Apache-2.0
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * *  Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * *  Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * *  Neither the name of Texas Instruments Incorporated nor the names of
+ *    its contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+/*
+ *  ======== ClockP_zephyr.c ========
+ */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
 
 #include <zephyr/kernel.h>
+
 #include <ti/drivers/dpl/ClockP.h>
 
-#define CLOCKP_TICK_PERIOD (US_PER_S / CONFIG_SYS_CLOCK_TICKS_PER_SEC);
+#define US_PER_S (1000000UL)
+#define CLOCKP_TICK_PERIOD (US_PER_S / CONFIG_SYS_CLOCK_TICKS_PER_SEC)
 
-/* 
- * ClockP_STRUCT_SIZE in ClockP.h must be updated to match the size of this
- * struct
- */
-typedef struct _ClockP_Obj {
-	struct k_timer timer;
+typedef struct _ClockP_Obj
+{
+    struct k_timer timer;
 	ClockP_Fxn clock_fxn;
 	uintptr_t arg;
 	uint32_t timeout; /* in sys clock uptime ticks */
@@ -22,76 +55,137 @@ typedef struct _ClockP_Obj {
 	bool active;
 } ClockP_Obj;
 
-static ClockP_Params ClockP_defaultParams = {
-    .startFlag = false,
-    .period = 0,
-    .arg = 0,
-};
 
-static void expiry_fxn(struct k_timer *timer_id)
-{
-	ClockP_Obj *obj = (ClockP_Obj *)k_timer_user_data_get(timer_id);
-	
-	obj->clock_fxn(obj->arg);
-}
+static void expiryCallbackFunction(struct k_timer *timer_id);
 
 /*
  *  ======== ClockP_construct ========
- *  @param timeout in sys clock uptime ticks
  */
-ClockP_Handle ClockP_construct(ClockP_Struct *handle, ClockP_Fxn clockFxn,
-        uint32_t timeout, ClockP_Params *params)
+ClockP_Handle ClockP_construct(ClockP_Struct *clockP, ClockP_Fxn clockFxn, uint32_t timeout, ClockP_Params *params)
 {
-	ClockP_Obj *obj = (ClockP_Obj *)handle;
+	ClockP_Obj* clockPObj = (ClockP_Obj*)clockP;
+    ClockP_Params ClockP_defaultParams;
 
-	if (handle == NULL) {
+	if (clockPObj == NULL) {
 		return NULL;
 	}
 
 	if (params == NULL) {
 		params = &ClockP_defaultParams;
+        ClockP_Params_init(params);
 	}
 
-	obj->clock_fxn = clockFxn;
-	obj->arg = params->arg;
-	obj->period = params->period;
-	obj->timeout = timeout;
-	obj->active = false;
+	clockPObj->clock_fxn = clockFxn;
+	clockPObj->arg = params->arg;
+	clockPObj->period = params->period;
+	clockPObj->timeout = timeout;
+	clockPObj->active = false;
 	
-	k_timer_init(&obj->timer, expiry_fxn, NULL);
-	k_timer_user_data_set(&obj->timer, obj);
+	k_timer_init(&clockPObj->timer, expiryCallbackFunction, NULL);
+	k_timer_user_data_set(&clockPObj->timer, clockPObj);
 	
 	if (params->startFlag) {
-		ClockP_start(obj);
+		ClockP_start(clockPObj);
 	}
 	
-	return  ((ClockP_Handle)handle);
+	return ((ClockP_Handle)clockPObj);
 }
 
 /*
- *  ======== ClockP_getSystemTickFreq ========
+ *  ======== ClockP_destruct ========
  */
-inline uint32_t ClockP_getSystemTickFreq()
+void ClockP_destruct(ClockP_Struct *clockP)
 {
-   return CONFIG_SYS_CLOCK_TICKS_PER_SEC;
+    ClockP_Obj* clockPObj = (ClockP_Obj*)clockP->data;
+    if(clockPObj == NULL) {
+        return;
+    }
+
+	clockPObj->clock_fxn = NULL;
+	clockPObj->arg = 0;
+	clockPObj->period = 0;
+	clockPObj->timeout = 0;
+	clockPObj->active = false;
+
+	k_timer_stop(&clockPObj->timer);
+}
+
+/*
+ *  ======== ClockP_create ========
+ */
+ClockP_Handle ClockP_create(ClockP_Fxn clockFxn, uint32_t timeout, ClockP_Params *params)
+{
+    ClockP_Struct* clockP = k_malloc(ClockP_STRUCT_SIZE);
+    if(ClockP_construct(clockP, clockFxn, timeout, params) == NULL) {
+        k_free(clockP);
+    }
+
+	return ((ClockP_Handle)clockP);
+}
+
+/*
+ *  ======== ClockP_delete ========
+ */
+void ClockP_delete(ClockP_Handle handle)
+{
+    ClockP_Struct* clockP = (ClockP_Struct*)handle;
+    if(clockP == NULL) {
+        return;
+    }
+
+    ClockP_destruct(clockP);
+    k_free(handle);
+}
+
+/*
+ *  ======== ClockP_getCpuFreq ========
+ */
+void ClockP_getCpuFreq(ClockP_FreqHz *freq)
+{
+    freq->lo = (uint32_t)CONFIG_SYS_CLOCK_TICKS_PER_SEC;
+    freq->hi = 0;
 }
 
 /*
  *  ======== ClockP_getSystemTickPeriod ========
- *
- *  This implementation rounds the system tick period down by ~17250ppm
- *  which makes it useless for any precision timing. Use
- *  (timeUs * ClockP_getSystemTickFreq() for these purposes instead.
  */
-inline uint32_t ClockP_getSystemTickPeriod()
+uint32_t ClockP_getSystemTickPeriod(void)
 {
-   return CLOCKP_TICK_PERIOD;
+    return (CLOCKP_TICK_PERIOD);
 }
 
-uint32_t ClockP_getSystemTicks()
+/*
+ *  ======== ClockP_getSystemTicks ========
+ */
+uint32_t ClockP_getSystemTicks(void)
 {
-	/* may wrap */
-	return k_uptime_ticks();
+    return k_uptime_ticks();
+}
+
+/*
+ *  ======== ClockP_getTimeout ========
+ */
+uint32_t ClockP_getTimeout(ClockP_Handle handle)
+{
+    ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
+    if(clockPObj == NULL) {
+        return 0;
+    }
+
+    return clockPObj->active ? k_timer_remaining_ticks(&clockPObj->timer) : clockPObj->timeout;
+}
+
+/*
+ *  ======== ClockP_isActive ========
+ */
+bool ClockP_isActive(ClockP_Handle handle)
+{
+    ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
+    if(clockPObj == NULL) {
+        return false;
+    }
+
+    return clockPObj->active;
 }
 
 /*
@@ -99,20 +193,39 @@ uint32_t ClockP_getSystemTicks()
  */
 void ClockP_Params_init(ClockP_Params *params)
 {
-	params->arg = 0;
-	params->startFlag = false;
-	params->period = 0;
+    if(params == NULL) {
+        return;
+    }
+
+    params->startFlag = false;
+    params->period    = 0;
+    params->arg       = (uintptr_t)0;
 }
 
 /*
  *  ======== ClockP_setTimeout ========
- *  @param timeout in sys clock uptime ticks
  */
 void ClockP_setTimeout(ClockP_Handle handle, uint32_t timeout)
 {
-	ClockP_Obj *obj = (ClockP_Obj *)handle;
+    ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
+    if(clockPObj == NULL) {
+        return;
+    }
 
-	obj->timeout = timeout;
+	clockPObj->timeout = timeout;
+}
+
+/*
+ *  ======== ClockP_setPeriod ========
+ */
+void ClockP_setPeriod(ClockP_Handle handle, uint32_t period)
+{
+    ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
+    if(clockPObj == NULL) {
+        return;
+    }
+
+	clockPObj->period = period;
 }
 
 /*
@@ -120,10 +233,13 @@ void ClockP_setTimeout(ClockP_Handle handle, uint32_t timeout)
  */
 void ClockP_start(ClockP_Handle handle)
 {
-	ClockP_Obj *obj = (ClockP_Obj *)handle;
+    ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
+    if(clockPObj == NULL) {
+        return;
+    }
 
-	k_timer_start(&obj->timer, K_TICKS(obj->timeout), K_TICKS(obj->period));
-	obj->active = true;
+	k_timer_start(&clockPObj->timer, K_TICKS(clockPObj->timeout), K_TICKS(clockPObj->period));
+	clockPObj->active = true;
 }
 
 /*
@@ -131,10 +247,13 @@ void ClockP_start(ClockP_Handle handle)
  */
 void ClockP_stop(ClockP_Handle handle)
 {
-	ClockP_Obj *obj = (ClockP_Obj *)handle;
+    ClockP_Obj* clockPObj = (ClockP_Obj*)handle;
+    if(clockPObj == NULL) {
+        return;
+    }
 
-	k_timer_stop(&obj->timer);
-	obj->active = false;
+	k_timer_stop(&clockPObj->timer);
+	clockPObj->active = false;
 }
 
 /*
@@ -146,30 +265,22 @@ void ClockP_usleep(uint32_t usec)
 }
 
 /*
- *  ======== ClockP_getTimeout ========
+ *  ======== ClockP_sleep ========
  */
-uint32_t ClockP_getTimeout(ClockP_Handle handle) {
-    ClockP_Obj *obj = (ClockP_Obj *)handle;
-    return obj->active ? k_timer_remaining_ticks(&obj->timer) : obj->timeout;
+void ClockP_sleep(uint32_t sec)
+{
+    k_sleep(K_SECONDS(sec));
 }
 
 /*
- *  ======== ClockP_isActive ========
+ *  ======== expiryCallbackFunction ========
  */
-bool ClockP_isActive(ClockP_Handle handle) {
-    ClockP_Obj *obj = (ClockP_Obj *)handle;
-    return obj->active;
-}
-
-void ClockP_destruct(ClockP_Struct *clockP)
+static void expiryCallbackFunction(struct k_timer *timer_id)
 {
-	ClockP_Obj *obj = (ClockP_Obj *)clockP->data;
-
-	obj->clock_fxn = NULL;
-	obj->arg = 0;
-	obj->period = 0;
-	obj->timeout = 0;
-	obj->active = false;
-
-	k_timer_stop(&obj->timer);
+	ClockP_Obj* clockPObj = (ClockP_Obj*)k_timer_user_data_get(timer_id);
+    if(clockPObj == NULL) {
+        return;
+    }
+	
+	clockPObj->clock_fxn(clockPObj->arg);
 }

@@ -1,172 +1,166 @@
 /*
- * Copyright (c) 2017, Texas Instruments Incorporated
+ * Copyright (c) 2015-2022, Texas Instruments Incorporated
+ * All rights reserved.
  *
- * SPDX-License-Identifier: Apache-2.0
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * *  Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * *  Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * *  Neither the name of Texas Instruments Incorporated nor the names of
+ *    its contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include <zephyr/kernel.h>
-#include <zephyr/sys/__assert.h>
-#include <kernel/zephyr/dpl/dpl.h>
+/*
+ *  ======== SemaphoreP_zephyr.c ========
+ */
 #include <ti/drivers/dpl/SemaphoreP.h>
 
+#include <zephyr/kernel.h>
+
 /*
- * Zephyr kernel object pools:
- *
- * This bit of code enables the simplelink host driver, which assumes dynamic
- * allocation of kernel objects (semaphores, mutexes, hwis), to be
- * more easily ported to Zephyr (which supports static allocation).
- *
- * It leverages the Zephyr memory slab, enabling us to define a semaphore
- * object pool for use by the SimpleLink host driver.
+ *  ======== SemaphoreP_construct ========
  */
-#define DPL_MAX_SEMAPHORES 14  /* (user.h:MAX_CONCURRENT_ACTIONS+4) = 14 */
-K_MEM_SLAB_DEFINE(sem_slab, sizeof(struct k_sem), DPL_MAX_SEMAPHORES,\
-		  MEM_ALIGN);
-
-static struct k_sem *dpl_sem_pool_alloc()
+SemaphoreP_Handle SemaphoreP_construct(SemaphoreP_Struct *handle, unsigned int count, SemaphoreP_Params *params)
 {
-	struct k_sem *sem_ptr = NULL;
-
-	if (k_mem_slab_alloc(&sem_slab, (void **)&sem_ptr, K_NO_WAIT) < 0) {
-		/*
-		 * We assert, as this is a logic error, due to a change in #
-		 * of semaphores needed by the simplelink driver. In that case,
-		 * the sem pool must be increased programmatically to match.
-		 */
-		 __ASSERT(0, "Increase size of DPL semaphore pool");
-	}
-	return sem_ptr;
-}
-
-static SemaphoreP_Status dpl_sem_pool_free(struct k_sem *sem)
-{
-	k_mem_slab_free(&sem_slab, (void **)&sem);
-
-	return SemaphoreP_OK;
-}
-
-/* timeout comes in and out in ticks */
-static k_timeout_t dpl_convert_timeout(uint32_t timeout)
-{
-	switch(timeout) {
-	case SemaphoreP_NO_WAIT:
-		return K_NO_WAIT;
-	case SemaphoreP_WAIT_FOREVER:
-		return K_FOREVER;
-	default:
-		return K_TICKS(timeout);
-	}
-}
-
-
-SemaphoreP_Handle SemaphoreP_create(unsigned int count,
-				    SemaphoreP_Params *params)
-{
-	unsigned int limit = UINT_MAX;
-	struct k_sem *sem;
-
-	if (params) {
-		limit = (params->mode == SemaphoreP_Mode_BINARY) ?
-			1 : UINT_MAX;
+    struct k_sem* semaphoreP = (struct k_sem*)handle;
+    if (semaphoreP == NULL) {
+		return NULL;
 	}
 
-	sem = dpl_sem_pool_alloc();
-	if (sem) {
-		k_sem_init(sem, count, limit);
-	}
+    if(k_sem_init(semaphoreP, count, ((params->mode == SemaphoreP_Mode_BINARY) ? 1 : K_SEM_MAX_LIMIT)) != 0) {
+        return NULL;
+    }
 
-	return (SemaphoreP_Handle)sem;
+    return ((SemaphoreP_Handle)semaphoreP);
 }
 
+/*
+ *  ======== SemaphoreP_constructBinary ========
+ */
+SemaphoreP_Handle SemaphoreP_constructBinary(SemaphoreP_Struct *handle, unsigned int count)
+{
+    SemaphoreP_Params params = {
+        .callback = NULL,
+        .mode = SemaphoreP_Mode_BINARY,
+    };
+
+    return SemaphoreP_construct(handle, count, &params);
+}
+
+/*
+ *  ======== SemaphoreP_destruct ========
+ */
+void SemaphoreP_destruct(SemaphoreP_Struct *semP)
+{
+    struct k_sem* semaphoreP = (struct k_sem*)semP;
+    if (semaphoreP == NULL) {
+		return;
+	}
+
+	k_sem_reset(semaphoreP);
+}
+
+/*
+ *  ======== SemaphoreP_create ========
+ */
+SemaphoreP_Handle SemaphoreP_create(unsigned int count, SemaphoreP_Params *params)
+{
+    SemaphoreP_Struct* handle = k_malloc(SemaphoreP_STRUCT_SIZE);
+    if(SemaphoreP_construct(handle, count, params) == NULL) {
+        k_free(handle);
+    }
+
+    return ((SemaphoreP_Handle)handle);
+}
+
+/*
+ *  ======== SemaphoreP_createBinary ========
+ */
 SemaphoreP_Handle SemaphoreP_createBinary(unsigned int count)
 {
-	SemaphoreP_Params params;
+    SemaphoreP_Struct* handle = k_malloc(SemaphoreP_STRUCT_SIZE);
+    if(SemaphoreP_constructBinary(handle, count) == NULL) {
+        k_free(handle);
+    }
 
-	SemaphoreP_Params_init(&params);
-	params.mode = SemaphoreP_Mode_BINARY;
-
-	return (SemaphoreP_create(count, &params));
-}
-
-
-void SemaphoreP_delete(SemaphoreP_Handle handle)
-{
-	k_sem_reset((struct k_sem *)handle);
-
-	(void)dpl_sem_pool_free((struct k_sem *)handle);
-}
-
-void SemaphoreP_Params_init(SemaphoreP_Params *params)
-{
-	params->mode = SemaphoreP_Mode_COUNTING;
-	params->callback = NULL;
+    return ((SemaphoreP_Handle)handle);
 }
 
 /*
- * The SimpleLink driver calls this function with a timeout of 0 to "clear"
- * the SyncObject, rather than calling dpl_SyncObjClear() directly.
- * See: <simplelinksdk>/source/ti/drivers/net/wifi/source/driver.h
- *  #define SL_DRV_SYNC_OBJ_CLEAR(pObj)
- *	    (void)sl_SyncObjWait(pObj,SL_OS_NO_WAIT);
- *
- * So, we claim (via simplelink driver code inspection), that SyncObjWait
- * will *only* be called with timeout == 0 if the intention is to clear the
- * semaphore: in that case, we just call k_sem_reset.
+ *  ======== SemaphoreP_delete ========
+ */
+void SemaphoreP_delete(SemaphoreP_Handle handle)
+{
+    SemaphoreP_Struct* semaphoreP = (SemaphoreP_Struct*)handle;
+    if(semaphoreP == NULL) {
+        return;
+    }
+
+    SemaphoreP_destruct(semaphoreP);
+    k_free(semaphoreP);
+}
+
+/*
+ *  ======== SemaphoreP_Params_init ========
+ */
+void SemaphoreP_Params_init(SemaphoreP_Params *params)
+{
+    if(params == NULL) {
+        return;
+    }
+    
+    params->mode     = SemaphoreP_Mode_COUNTING;
+    params->callback = NULL;
+}
+
+/*
+ *  ======== SemaphoreP_pend ========
  */
 SemaphoreP_Status SemaphoreP_pend(SemaphoreP_Handle handle, uint32_t timeout)
 {
-	int retval;
+    struct k_sem* semaphoreP = (struct k_sem*)handle;
+    if(semaphoreP == NULL) {
+        return SemaphoreP_TIMEOUT;
+    }
 
-	if (0 == timeout) {
-		k_sem_reset((struct k_sem *)handle);
-		retval = SemaphoreP_OK;
-	} else {
-		retval = k_sem_take((struct k_sem *)handle,
-				    dpl_convert_timeout(timeout));
-		__ASSERT_NO_MSG(retval != -EBUSY);
-		retval = (retval >= 0) ? SemaphoreP_OK : SemaphoreP_TIMEOUT;
-	}
-	return retval;
+    k_timeout_t k_timeout = {.ticks = timeout};
+
+    if(k_sem_take(semaphoreP, k_timeout) == 0)
+    {
+        return SemaphoreP_OK;
+    }
+
+    return SemaphoreP_TIMEOUT;
 }
 
+/*
+ *  ======== SemaphoreP_post ========
+ */
 void SemaphoreP_post(SemaphoreP_Handle handle)
 {
-	k_sem_give((struct k_sem *)handle);
-}
-
-SemaphoreP_Handle SemaphoreP_construct(SemaphoreP_Struct *handle,
-                    unsigned int count, SemaphoreP_Params *params)
-{
-    unsigned int limit = UINT_MAX;
-    struct k_sem *sem;
-
-    if (params) {
-        limit = (params->mode == SemaphoreP_Mode_BINARY) ?
-            1 : UINT_MAX;
+    struct k_sem* semaphoreP = (struct k_sem*)handle;
+    if(semaphoreP == NULL) {
+        return;
     }
 
-    sem = (struct k_sem *)handle;
-    if (sem) {
-        k_sem_init(sem, count, limit);
-    }
-
-    return (SemaphoreP_Handle)sem;
-}
-
-SemaphoreP_Handle SemaphoreP_constructBinary(SemaphoreP_Struct *handle, unsigned int count) {
-    SemaphoreP_Params params;
-
-    SemaphoreP_Params_init(&params);
-    params.mode = SemaphoreP_Mode_BINARY;
-
-    return (SemaphoreP_construct(handle, count, &params));
-}
-
-void SemaphoreP_destruct(SemaphoreP_Struct *semP) {
-    struct k_sem *sem;
-
-    sem = (struct k_sem *)semP->data;
-    if (sem) {
-        k_sem_reset(sem);
-    }
+    k_sem_give(semaphoreP);
 }

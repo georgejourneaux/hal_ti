@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Texas Instruments Incorporated
+ * Copyright (c) 2020-2022, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,12 +33,17 @@
  *  ======== QueueP.h ========
  */
 
-typedef struct _QueueP_Elem {
+#include <stdint.h>
+#include <stdbool.h>
+
+typedef struct _QueueP_Elem
+{
     struct _QueueP_Elem *volatile next;
     struct _QueueP_Elem *volatile prev;
 } QueueP_Elem;
 
-typedef struct _QueueP_Obj {
+typedef struct _QueueP_Obj
+{
     QueueP_Elem elem;
 } QueueP_Obj;
 
@@ -50,5 +55,5 @@ uintptr_t QueueP_next(QueueP_Elem *qelem);
 uintptr_t QueueP_prev(QueueP_Elem *qelem);
 uintptr_t QueueP_get(QueueP_Obj *obj);
 void QueueP_put(QueueP_Obj *obj, QueueP_Elem *elem);
-void QueueP_remove(QueueP_Elem *qelem) ;
+void QueueP_remove(QueueP_Elem *qelem);
 bool QueueP_empty(QueueP_Obj *obj);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019, Texas Instruments Incorporated
+ * Copyright (c) 2015-2022, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -62,10 +62,12 @@ extern "C" {
  *  @brief    Number of bytes greater than or equal to the size of any RTOS
  *            HwiP object.
  *
- *  nortos:   12
- *  SysBIOS:  28
+ *  NoRTOS:   12
+ *  FreeRTOS: 12
+ *  BIOS 6.x: 28
+ *  BIOS 7.x: 20
  */
-#define HwiP_STRUCT_SIZE   (28)
+#define HwiP_STRUCT_SIZE (28)
 
 /*!
  *  @brief    HwiP structure.
@@ -73,9 +75,10 @@ extern "C" {
  *  Opaque structure that should be large enough to hold any of the RTOS
  *  specific HwiP objects.
  */
-typedef union HwiP_Struct {
-    uint32_t dummy;  /*!< Align object */
-    char     data[HwiP_STRUCT_SIZE];
+typedef union HwiP_Struct
+{
+    uint32_t dummy; /*!< Align object */
+    uint8_t data[HwiP_STRUCT_SIZE];
 } HwiP_Struct;
 
 /*!
@@ -83,13 +86,14 @@ typedef union HwiP_Struct {
  *
  *  A HwiP_Handle returned from the ::HwiP_create represents that instance.
  */
-typedef  void *HwiP_Handle;
+typedef void *HwiP_Handle;
 
 /*!
  *  @brief    Status codes for HwiP APIs
  */
-typedef enum {
-    HwiP_OK = 0,
+typedef enum
+{
+    HwiP_OK      = 0,
     HwiP_FAILURE = -1
 } HwiP_Status;
 
@@ -110,10 +114,11 @@ typedef void (*HwiP_Fxn)(uintptr_t arg);
  *  Parameter enableInt specifies if the interrupt should be enabled
  *  upon creation of the HwiP object.  The default is true.
  */
-typedef struct {
-    uintptr_t  arg;       /*!< Argument passed into the Hwi function. */
-    uint32_t   priority;  /*!< Device specific priority. */
-    bool       enableInt; /*!< Enable interrupt on creation. */
+typedef struct
+{
+    uintptr_t arg;     /*!< Argument passed into the Hwi function. */
+    uint32_t priority; /*!< Device specific priority. */
+    bool enableInt;    /*!< Enable interrupt on creation. */
 } HwiP_Params;
 
 /*!
@@ -146,8 +151,7 @@ extern int HwiP_swiPIntNum;
  *
  *  @return A HwiP_Handle on success or a NULL on an error
  */
-extern HwiP_Handle HwiP_construct(HwiP_Struct *hwiP, int interruptNum,
-                                  HwiP_Fxn hwiFxn, HwiP_Params *params);
+extern HwiP_Handle HwiP_construct(HwiP_Struct *hwiP, int interruptNum, HwiP_Fxn hwiFxn, HwiP_Params *params);
 
 /*!
  *  @brief  Function to destruct a hardware interrupt object
@@ -169,6 +173,8 @@ extern void HwiP_clearInterrupt(int interruptNum);
 /*!
  *  @brief  Function to create an interrupt on CortexM devices
  *
+ *  @note   This function may not be available on all implementations
+ *
  *  @param  interruptNum Interrupt Vector Id
  *
  *  @param  hwiFxn entry function of the hardware interrupt
@@ -179,11 +185,12 @@ extern void HwiP_clearInterrupt(int interruptNum);
  *
  *  @return A HwiP_Handle on success or a NULL on an error
  */
-extern HwiP_Handle HwiP_create(int interruptNum, HwiP_Fxn hwiFxn,
-                               HwiP_Params *params);
+extern HwiP_Handle HwiP_create(int interruptNum, HwiP_Fxn hwiFxn, HwiP_Params *params);
 
 /*!
  *  @brief  Function to delete an interrupt on CortexM devices
+ *
+ *  @note   This function may not be available on all implementations
  *
  *  @param  handle returned from the HwiP_create call
  *
@@ -237,6 +244,15 @@ extern void HwiP_enableInterrupt(int interruptNum);
 extern bool HwiP_inISR(void);
 
 /*!
+ *  @brief  Function to determine whether interrupts are currently enabled.
+ *
+ *  @return Current state of interrupts.
+ *    - true  Interrupts are currently enabled.
+ *    - false Interrupts are currently disabled.
+ */
+extern bool HwiP_interruptsEnabled(void);
+
+/*!
  *  @brief  Initialize params structure to default values.
  *
  *  The default parameters are:
@@ -286,6 +302,15 @@ extern void HwiP_setFunc(HwiP_Handle hwiP, HwiP_Fxn fxn, uintptr_t arg);
  *  @param  priority new priority
  */
 extern void HwiP_setPriority(int interruptNum, uint32_t priority);
+
+/*!
+ *  @brief  Function to call the HW ISR function registered by ::HwiP_construct
+ *
+ *  @note   This function may not be available on all implementations
+ *
+ *  @param  interruptNum Interrupt Vector Id
+ */
+void HwiP_dispatchInterrupt(int interruptNum);
 
 #ifdef __cplusplus
 }

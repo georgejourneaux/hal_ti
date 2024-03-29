@@ -16,7 +16,6 @@ zephyr_library_sources(
   # Required functions to support the TI Power module
   driverlib/sys_ctrl.c
   driverlib/osc.c
-  driverlib/driverlib_release.c
   # Required for newer HAL TI >= 4.40 (for PRCMPowerDomainsAllOn)
   driverlib/prcm.c
   )
@@ -24,10 +23,7 @@ zephyr_library_sources(
 # Required for IEEE 802.15.4 support
 zephyr_library_sources_ifdef(CONFIG_IEEE802154_CC13XX_CC26XX
   rf_patches/rf_patch_cpe_multi_protocol.c)
-# Required for IEEE 802.15.4 support
-# (until driver is changed to use multi-protocol rf patch)
-zephyr_library_sources_ifdef(CONFIG_IEEE802154_CC13XX_CC26XX
-  rf_patches/rf_patch_cpe_ieee_802_15_4.c)
+
 # Required for RFCDoorbellSendTo which is not in ROM
 zephyr_library_sources_ifdef(CONFIG_IEEE802154_CC13XX_CC26XX driverlib/rfc.c)
 

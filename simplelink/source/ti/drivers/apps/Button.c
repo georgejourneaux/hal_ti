@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2019, Texas Instruments Incorporated
+ * Copyright (c) 2016-2021, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,17 +42,35 @@
 #include <ti/drivers/apps/Button.h>
 
 /* Default Button_Params parameters structure */
-const Button_Params Button_defaultParams =
-{
-    5,               /* 5 ms is the debounce timer value */
-    2000,            /* 2 seconds long press duration */
-    200,             /* 200 ms double key press detection timeout */
-    0xFF             /* button subscribed for all callbacks */
+const Button_Params Button_defaultParams = {
+    5,    /* 5 ms is the debounce timer value */
+    2000, /* 2 seconds long press duration */
+    200,  /* 200 ms double key press detection timeout */
+    0xFF  /* button subscribed for all callbacks */
 };
 
 extern Button_Config Button_config[];
 
 /* Local functions */
+
+/*
+ *  ======== ticksToMs ========
+ * Convert system ticks to milliseconds(ms). If the value cannot be represented
+ * with 32 bits, ~0 is returned.
+ */
+static uint32_t ticksToMs(uint32_t ticks)
+{
+    uint64_t ms = (ticks * ClockP_getSystemTickPeriod()) / 1000;
+
+    if ((uint64_t)ms > (uint32_t)ms)
+    {
+        return ((uint32_t)~0);
+    }
+    else
+    {
+        return ((uint32_t)ms);
+    }
+}
 
 /*
  *  ======== timediff ========
@@ -64,29 +82,48 @@ static uint32_t timediff(uint32_t startTick)
 {
     uint32_t currentTick = ClockP_getSystemTicks();
 
-    if(currentTick > startTick)
+    if (currentTick > startTick)
     {
-        return(currentTick - startTick);
+        return (currentTick - startTick);
     }
-    else {
+    else
+    {
         /* System tick value overflowed */
-        return(currentTick + ((uint32_t)(~0) - startTick));
+        return (currentTick + ((uint32_t)(~0) - startTick));
     }
+}
+
+/*
+ *  ======== msToTicks ========
+ * Convert milliseconds to system ticks
+ */
+static uint32_t msToTicks(uint32_t ms)
+{
+    if (ms == 0)
+    {
+        return 0;
+    }
+
+    uint32_t ticks = (ms * 1000) / ClockP_getSystemTickPeriod();
+
+    /* If ticks is 0, return 1 (the smallest representable value) */
+    return ticks ? ticks : 1;
 }
 
 /*
  *  ======== Button_close ========
  *  Closes an instance of a Button
  */
-bool Button_close(Button_Handle handle)
+void Button_close(Button_Handle handle)
 {
     Button_Object *obj = (Button_Object *)(handle->object);
     Button_HWAttrs *hw = (Button_HWAttrs *)handle->hwAttrs;
-    GPIO_disableInt(hw->gpioIndex);
+
+    GPIO_resetConfig(hw->gpioIndex);
+
     ClockP_stop(obj->clockHandle);
     ClockP_delete(obj->clockHandle);
     obj->clockHandle = NULL;
-    return(true);
 }
 
 /*
@@ -98,16 +135,16 @@ void Button_gpioCallbackFxn(uint_least8_t index)
     /* Handle GPIO interrupt */
     uint_least8_t i;
 
-    for(i = 0; i < Button_count; i++)
+    for (i = 0; i < Button_count; i++)
     {
-        Button_Object *obj = (Button_Object*) Button_config[i].object;
-        Button_HWAttrs *hw = (Button_HWAttrs*) Button_config[i].hwAttrs;
-        if(hw->gpioIndex == index)
+        Button_Object *obj = (Button_Object *)Button_config[i].object;
+        Button_HWAttrs *hw = (Button_HWAttrs *)Button_config[i].hwAttrs;
+        if (hw->gpioIndex == index)
         {
             ClockP_setTimeout(obj->clockHandle, obj->debounceDuration);
             ClockP_start(obj->clockHandle);
 
-            switch(obj->buttonStateVariables.state)
+            switch (obj->buttonStateVariables.state)
             {
                 case Button_PRESSING:
                     obj->buttonStateVariables.state = Button_RELEASING;
@@ -146,7 +183,7 @@ void Button_gpioCallbackFxn(uint_least8_t index)
 /*
  *  ======== Button_init ========
  */
-void Button_init()
+void Button_init(void)
 {
     /* Initialize GPIO driver if it wasn't already */
     GPIO_init();
@@ -161,42 +198,38 @@ static void Button_clockTimeoutHandler(uintptr_t arg)
     Button_Object *obj;
     Button_HWAttrs *hw;
     Button_Handle buttonHandle;
-    GPIO_PinConfig pinConfig;
     Button_EventMask buttonEvents = 0;
 
     buttonHandle = (Button_Handle)arg;
-    obj = (Button_Object *)buttonHandle->object;
-    hw  = (Button_HWAttrs*)buttonHandle->hwAttrs;
-    GPIO_getConfig(hw->gpioIndex,&pinConfig);
+    obj          = (Button_Object *)buttonHandle->object;
+    hw           = (Button_HWAttrs *)buttonHandle->hwAttrs;
 
-    if(GPIO_read(hw->gpioIndex) == obj->buttonPull)
+    if (GPIO_read(hw->gpioIndex) == hw->pullMode)
     {
         /*
          * Getting a debounce duration timeout callback. The button is
          * currently in unpressed (pull) state.
          */
-        switch(obj->buttonStateVariables.state)
+        switch (obj->buttonStateVariables.state)
         {
             case Button_RELEASING:
-                if(obj->buttonEventMask & Button_EV_DOUBLECLICKED)
+                if (obj->buttonEventMask & Button_EV_DOUBLECLICKED)
                 {
                     /* Set clock to detect a double press */
                     obj->buttonStateVariables.state = Button_DBLPRESS_DETECTION;
-                    ClockP_setTimeout(obj->clockHandle,
-                                      obj->doublePressDetectiontimeout -
-                                      obj->debounceDuration);
+                    ClockP_setTimeout(obj->clockHandle, obj->doublePressDetectiontimeout - obj->debounceDuration);
                     ClockP_start(obj->clockHandle);
                 }
                 else
                 {
-                    obj->buttonStateVariables.lastPressedDuration =
-                        timediff(obj->buttonStateVariables.pressedStartTime);
+                    obj->buttonStateVariables.lastPressedDuration = timediff(
+                        obj->buttonStateVariables.pressedStartTime);
                     obj->buttonStateVariables.state = Button_RELEASED;
-                    if(obj->buttonEventMask & Button_EV_RELEASED)
+                    if (obj->buttonEventMask & Button_EV_RELEASED)
                     {
                         buttonEvents |= Button_EV_RELEASED;
                     }
-                    if(obj->buttonEventMask & Button_EV_CLICKED)
+                    if (obj->buttonEventMask & Button_EV_CLICKED)
                     {
                         buttonEvents |= Button_EV_CLICKED;
                     }
@@ -204,13 +237,12 @@ static void Button_clockTimeoutHandler(uintptr_t arg)
                 break;
 
             case Button_DBLPRESS_DETECTION:
-                obj->buttonStateVariables.lastPressedDuration =
-                    timediff(obj->buttonStateVariables.pressedStartTime);
-                if(obj->buttonEventMask & Button_EV_RELEASED)
+                obj->buttonStateVariables.lastPressedDuration = timediff(obj->buttonStateVariables.pressedStartTime);
+                if (obj->buttonEventMask & Button_EV_RELEASED)
                 {
                     buttonEvents |= Button_EV_RELEASED;
                 }
-                if(obj->buttonEventMask & Button_EV_CLICKED)
+                if (obj->buttonEventMask & Button_EV_CLICKED)
                 {
                     buttonEvents |= Button_EV_CLICKED;
                 }
@@ -218,11 +250,13 @@ static void Button_clockTimeoutHandler(uintptr_t arg)
                 break;
 
             case Button_RELEASING_LONG:
-                obj->buttonStateVariables.lastPressedDuration =
-                     timediff(obj->buttonStateVariables.pressedStartTime);
-                if(obj->buttonEventMask & Button_EV_LONGCLICKED)
+                obj->buttonStateVariables.lastPressedDuration = timediff(obj->buttonStateVariables.pressedStartTime);
+                if (obj->buttonEventMask & Button_EV_LONGCLICKED)
                 {
                     buttonEvents |= Button_EV_LONGCLICKED;
+                }
+                if (obj->buttonEventMask & Button_EV_RELEASED)
+                {
                     buttonEvents |= Button_EV_RELEASED;
                 }
                 obj->buttonStateVariables.state = Button_RELEASED;
@@ -230,7 +264,7 @@ static void Button_clockTimeoutHandler(uintptr_t arg)
 
             case Button_RELEASING_DBLPRESSED:
                 obj->buttonStateVariables.state = Button_RELEASED;
-                if(obj->buttonEventMask & Button_EV_RELEASED)
+                if (obj->buttonEventMask & Button_EV_RELEASED)
                 {
                     buttonEvents |= Button_EV_RELEASED;
                 }
@@ -254,17 +288,13 @@ static void Button_clockTimeoutHandler(uintptr_t arg)
                 obj->buttonStateVariables.state = Button_RELEASED;
                 break;
         }
-        if(obj->buttonPull == Button_PULL_DOWN)
+        if (hw->pullMode == Button_PULL_DOWN)
         {
-            GPIO_setConfig(hw->gpioIndex,
-                          ((pinConfig & (~GPIO_CFG_INT_MASK))|
-                            GPIO_CFG_IN_INT_RISING));
+            GPIO_setInterruptConfig(hw->gpioIndex, GPIO_CFG_IN_INT_RISING | GPIO_CFG_INT_ENABLE);
         }
-        else if(obj->buttonPull == Button_PULL_UP)
+        else if (hw->pullMode == Button_PULL_UP)
         {
-            GPIO_setConfig(hw->gpioIndex,
-                          ((pinConfig & (~GPIO_CFG_INT_MASK))|
-                          GPIO_CFG_IN_INT_FALLING));
+            GPIO_setInterruptConfig(hw->gpioIndex, GPIO_CFG_IN_INT_FALLING | GPIO_CFG_INT_ENABLE);
         }
     }
     /*
@@ -273,18 +303,17 @@ static void Button_clockTimeoutHandler(uintptr_t arg)
      */
     else
     {
-        switch(obj->buttonStateVariables.state)
+        switch (obj->buttonStateVariables.state)
         {
             case Button_PRESSING:
                 /* This is a debounced press */
                 obj->buttonStateVariables.pressedStartTime = ClockP_getSystemTicks();
-                if(obj->buttonEventMask & Button_EV_PRESSED)
+                if (obj->buttonEventMask & Button_EV_PRESSED)
                 {
                     buttonEvents |= Button_EV_PRESSED;
                 }
                 /* Start countdown if interest in long-press */
-                if(obj->buttonEventMask &
-                   (Button_EV_LONGPRESSED | Button_EV_LONGCLICKED))
+                if (obj->buttonEventMask & (Button_EV_LONGPRESSED | Button_EV_LONGCLICKED))
                 {
                     obj->buttonStateVariables.state = Button_LONGPRESSING;
                     ClockP_setTimeout(obj->clockHandle, obj->longPressDuration - obj->debounceDuration);
@@ -298,7 +327,7 @@ static void Button_clockTimeoutHandler(uintptr_t arg)
 
             case Button_DBLPRESSING:
                 /* This is a debounced press (this is considered as double click) */
-                if(obj->buttonEventMask & Button_EV_DOUBLECLICKED)
+                if (obj->buttonEventMask & Button_EV_DOUBLECLICKED)
                 {
                     buttonEvents |= Button_EV_DOUBLECLICKED;
                 }
@@ -307,7 +336,7 @@ static void Button_clockTimeoutHandler(uintptr_t arg)
 
             case Button_LONGPRESSING:
                 obj->buttonStateVariables.state = Button_LONGPRESSED;
-                if(obj->buttonEventMask & Button_EV_LONGPRESSED)
+                if (obj->buttonEventMask & Button_EV_LONGPRESSED)
                 {
                     buttonEvents |= Button_EV_LONGPRESSED;
                 }
@@ -316,58 +345,50 @@ static void Button_clockTimeoutHandler(uintptr_t arg)
             case Button_RELEASING:
             case Button_RELEASING_LONG:
             case Button_RELEASING_DBLPRESSED:
-            /*
-            * We're releasing, but isn't released after debounce.
-            * Start count down again if interest in long-press
-            */
-            if(obj->buttonEventMask &
-               (Button_EV_LONGPRESSED | Button_EV_LONGCLICKED))
-            {
-                obj->buttonStateVariables.state = Button_LONGPRESSING;
-                ClockP_setTimeout(obj->clockHandle, obj->longPressDuration - obj->debounceDuration);
-                ClockP_start(obj->clockHandle);
-                obj->buttonStateVariables.state = Button_LONGPRESSING;
-            }
-            else
-            {
-                obj->buttonStateVariables.state = Button_PRESSED;
-            }
+                /*
+                 * We're releasing, but isn't released after debounce.
+                 * Start count down again if interest in long-press
+                 */
+                if (obj->buttonEventMask & (Button_EV_LONGPRESSED | Button_EV_LONGCLICKED))
+                {
+                    obj->buttonStateVariables.state = Button_LONGPRESSING;
+                    ClockP_setTimeout(obj->clockHandle, obj->longPressDuration - obj->debounceDuration);
+                    ClockP_start(obj->clockHandle);
+                    obj->buttonStateVariables.state = Button_LONGPRESSING;
+                }
+                else
+                {
+                    obj->buttonStateVariables.state = Button_PRESSED;
+                }
 
             /*
              * Any other case, mark the button as pressed.
              * Typically we should not come here
              */
             default:
-                 obj->buttonStateVariables.state = Button_PRESSED;
-                 break;
+                obj->buttonStateVariables.state = Button_PRESSED;
+                break;
         }
-        if(obj->buttonPull == Button_PULL_DOWN)
+        if (hw->pullMode == Button_PULL_DOWN)
         {
-            GPIO_setConfig(hw->gpioIndex,
-                          ((pinConfig & (~GPIO_CFG_INT_MASK))
-                          |GPIO_CFG_IN_INT_FALLING));
+            GPIO_setInterruptConfig(hw->gpioIndex, GPIO_CFG_IN_INT_FALLING | GPIO_CFG_INT_ENABLE);
         }
-        else if(obj->buttonPull == Button_PULL_UP)
+        else if (hw->pullMode == Button_PULL_UP)
         {
-            GPIO_setConfig(hw->gpioIndex,
-                          ((pinConfig & (~GPIO_CFG_INT_MASK))|
-                          GPIO_CFG_IN_INT_RISING));
+            GPIO_setInterruptConfig(hw->gpioIndex, GPIO_CFG_IN_INT_RISING | GPIO_CFG_INT_ENABLE);
         }
     }
-    if((buttonEvents != 0) && (obj->buttonCallback != NULL))
+    if ((buttonEvents != 0) && (obj->buttonCallback != NULL))
     {
-        obj->buttonCallback(buttonHandle,buttonEvents);
+        obj->buttonCallback(buttonHandle, buttonEvents);
     }
-    GPIO_enableInt(hw->gpioIndex);
 }
 
 /*
  *  ======== Button_open ========
  *  Open a Button instance
  */
-Button_Handle Button_open(uint_least8_t buttonIndex,
-                          Button_Callback buttonCallback,
-                          Button_Params *params)
+Button_Handle Button_open(uint_least8_t buttonIndex, Button_Params *params)
 {
     Button_Params localParams;
     Button_Handle handle;
@@ -380,96 +401,70 @@ Button_Handle Button_open(uint_least8_t buttonIndex,
      * This sets the init state of the button
      * buttonIndex cannot be greater than total ButtonCount
      */
-    if(buttonIndex >= Button_count)
+    if (buttonIndex >= Button_count)
     {
-        return(NULL);
+        return NULL;
     }
 
     /* If params is null then use the default params */
-    if(params == NULL)
+    if (params == NULL)
     {
         /*
          * Make a local copy of default params to pass, to avoid casting away
          * const on Button_defaultParams
          */
         localParams = Button_defaultParams;
-        params = &localParams;
+        params      = &localParams;
     }
-
-    /* Call init in case user forgot */
-    Button_init();
 
     /* Get instance state structure */
     handle = (Button_Handle)&Button_config[buttonIndex];
-    obj = (Button_Object*)(Button_config[buttonIndex].object);
-    hw  = (Button_HWAttrs*)(Button_config[buttonIndex].hwAttrs);
-
-    /* If instance already has a clock then it is already open */
-    if(obj->clockHandle != NULL)
-    {
-        return(NULL);
-    }
+    obj    = (Button_Object *)(Button_config[buttonIndex].object);
+    hw     = (Button_HWAttrs *)(Button_config[buttonIndex].hwAttrs);
 
     /* Set internal variables */
-    obj->debounceDuration = ClockP_convertMsToSystemTicksRound(params->debounceDuration);
-    obj->longPressDuration = ClockP_convertMsToSystemTicksRound(params->longPressDuration);
-    obj->doublePressDetectiontimeout =
-        ClockP_convertMsToSystemTicksRound(params->doublePressDetectiontimeout);
-    obj->buttonCallback              = buttonCallback;
+    obj->debounceDuration            = msToTicks(params->debounceDuration);
+    obj->longPressDuration           = msToTicks(params->longPressDuration);
+    obj->doublePressDetectiontimeout = msToTicks(params->doublePressDetectiontimeout);
+    obj->buttonCallback              = params->buttonCallback;
     obj->buttonEventMask             = params->buttonEventMask;
 
-    /* Get button configuration from GPIO pin config */
-    obj->buttonPull = Button_PULL_NOTSET;
-    GPIO_getConfig(hw->gpioIndex, &pinConfig);
-    if(pinConfig & GPIO_CFG_IN_NOPULL)
+    /* If instance already has a clock then it is already open */
+    if (obj->clockHandle != NULL)
     {
-        /*
-         * Must infer pull from trigger edge. There is likely an external pull
-         * up/down attached to the button
-         */
-        if(pinConfig & GPIO_CFG_IN_INT_FALLING)
-        {
-            obj->buttonPull = Button_PULL_UP;
-        }
-        else if(pinConfig & GPIO_CFG_IN_INT_RISING)
-        {
-            obj->buttonPull = Button_PULL_DOWN;
-        }
-    }
-    else
-    {
-        /* Using an internal pull up/down */
-        if(pinConfig & GPIO_CFG_IN_PU)
-        {
-            obj->buttonPull = Button_PULL_UP;
-        }
-        else if(pinConfig & GPIO_CFG_IN_PD)
-        {
-            obj->buttonPull = Button_PULL_DOWN;
-        }
-    }
-
-    /* If read incorrect gpio settings, fail to open */
-    if(obj->buttonPull == Button_PULL_NOTSET)
-    {
-        return(NULL);
+        return NULL;
     }
 
     /* Create one shot clock for handling debounce */
     ClockP_Params_init(&clockParams);
-    clockParams.period = 0; /* Indicates a one shot clock */
+    clockParams.period    = 0; /* Indicates a one shot clock */
     clockParams.startFlag = false;
-    clockParams.arg = (uintptr_t) handle;
-    obj->clockHandle = ClockP_create(Button_clockTimeoutHandler, 0, &clockParams);
-    if(NULL == obj->clockHandle)
+    clockParams.arg       = (uintptr_t)handle;
+    obj->clockHandle      = ClockP_create(Button_clockTimeoutHandler, 0, &clockParams);
+    if (NULL == obj->clockHandle)
     {
-        return(NULL);
+        return NULL;
     }
 
-    /* Enable gpio interrupt */
+    /* Enable interrupt by default */
+    pinConfig = GPIO_CFG_INT_ENABLE;
+    pinConfig |= hw->pullMode == Button_PULL_DOWN ? GPIO_CFG_IN_INT_RISING : GPIO_CFG_IN_INT_FALLING;
+
+    /* Configure input mode with or without pull */
+    if (hw->internalPullEnabled)
+    {
+        pinConfig |= hw->pullMode == Button_PULL_DOWN ? GPIO_CFG_IN_PD : GPIO_CFG_IN_PU;
+    }
+    else
+    {
+        pinConfig |= GPIO_CFG_IN_NOPULL;
+    }
+
+    /* Set callback first in case we have a pending interrupt */
     GPIO_setCallback(hw->gpioIndex, &Button_gpioCallbackFxn);
-    GPIO_enableInt(hw->gpioIndex);
-    return(handle);
+    GPIO_setConfig(hw->gpioIndex, pinConfig);
+
+    return handle;
 }
 
 /*
@@ -485,7 +480,7 @@ void Button_Params_init(Button_Params *params)
  *  ======== Button_setCallback ========
  * Set the callback for the buttons.
  */
-void Button_setCallback(Button_Handle handle,Button_Callback buttonCallback)
+void Button_setCallback(Button_Handle handle, Button_Callback buttonCallback)
 {
     Button_Object *obj = (Button_Object *)handle->object;
 
@@ -498,7 +493,7 @@ void Button_setCallback(Button_Handle handle,Button_Callback buttonCallback)
  */
 extern uint32_t Button_getLastPressedDuration(Button_Handle handle)
 {
-    uint32_t ticks = ((Button_Object *)(handle->object))->
-        buttonStateVariables.lastPressedDuration;
-    return(ClockP_convertSystemTicksToMsRound(ticks));
+    Button_Object *obj = (Button_Object *)handle->object;
+    uint32_t ticks     = obj->buttonStateVariables.lastPressedDuration;
+    return ticksToMs(ticks);
 }

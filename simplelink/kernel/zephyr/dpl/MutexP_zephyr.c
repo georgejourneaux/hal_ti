@@ -1,95 +1,136 @@
 /*
- * Copyright (c) 2017, Texas Instruments Incorporated
+ * Copyright (c) 2015-2022, Texas Instruments Incorporated
+ * All rights reserved.
  *
- * SPDX-License-Identifier: Apache-2.0
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * *  Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * *  Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * *  Neither the name of Texas Instruments Incorporated nor the names of
+ *    its contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+/*
+ *  ======== MutexP_zephyr.c ========
  */
 
-#include <zephyr/kernel.h>
-#include <zephyr/sys/__assert.h>
-#include <kernel/zephyr/dpl/dpl.h>
 #include <ti/drivers/dpl/MutexP.h>
 
+#include <zephyr/kernel.h>
+
+
 /*
- * Zephyr kernel object pools:
- *
- * This bit of code enables the simplelink host driver, which assumes dynamic
- * allocation of kernel objects (semaphores, mutexes, hwis), to be
- * more easily ported to Zephyr (which supports static allocation).
- *
- * It leverages the Zephyr memory slab, enabling us to define a mutex object
- * pool for use by the SimpleLink host driver.
+ *  ======== MutexP_construct ========
  */
-
-/* Define a Mutex pool: */
-#define DPL_MAX_MUTEXES	 4  /* From simplelink driver code inspection */
-K_MEM_SLAB_DEFINE(mutex_slab, sizeof(struct k_mutex), DPL_MAX_MUTEXES,\
-		  MEM_ALIGN);
-
-static struct k_mutex *dpl_mutex_pool_alloc()
+MutexP_Handle MutexP_construct(MutexP_Struct *handle, MutexP_Params *params)
 {
-	struct k_mutex *mutex_ptr = NULL;
-
-	if (k_mem_slab_alloc(&mutex_slab, (void **)&mutex_ptr,
-			     K_NO_WAIT) < 0) {
-		/*
-		 * We assert, as this is a logic error, due to a change in #
-		 * of mutexes needed by the simplelink driver. In that case,
-		 * the mutex pool must be increased programmatically to match.
-		 */
-		 __ASSERT(0, "Increase size of DPL mutex pool");
+	struct k_mutex* mutexP = (struct k_mutex*)handle;
+    if (mutexP == NULL) {
+		return NULL;
 	}
-	return mutex_ptr;
+
+    if(k_mutex_init(mutexP) != 0) {
+        return NULL;
+    }
+
+    return ((MutexP_Handle)mutexP);
 }
 
-static MutexP_Status dpl_mutex_pool_free(struct k_mutex *mutex)
+/*
+ *  ======== MutexP_destruct ========
+ */
+void MutexP_destruct(MutexP_Struct *mutexP)
 {
-	k_mem_slab_free(&mutex_slab, (void **)&mutex);
-	return MutexP_OK;
+    if(mutexP == NULL) {
+        return;
+    }
+
+    k_mutex_init(mutexP);
 }
 
+/*
+ *  ======== MutexP_create ========
+ */
 MutexP_Handle MutexP_create(MutexP_Params *params)
 {
-	struct k_mutex *mutex;
+    MutexP_Struct* handle = k_malloc(MutexP_STRUCT_SIZE);
+    if(MutexP_construct(handle, params) == NULL) {
+        k_free(handle);
+    }
 
-	ARG_UNUSED(params);
-
-	mutex = dpl_mutex_pool_alloc();
-	__ASSERT(mutex, "MutexP_create failed\r\n");
-
-	if (mutex) {
-		k_mutex_init(mutex);
-	}
-	return ((MutexP_Handle)mutex);
+    return ((MutexP_Handle)handle);
 }
 
+/*
+ *  ======== MutexP_delete ========
+ */
 void MutexP_delete(MutexP_Handle handle)
 {
-	/* No way in Zephyr to "reset" the lock, so just re-init: */
-	k_mutex_init((struct k_mutex *)handle);
+    struct k_mutex* mutexP = (struct k_mutex*)handle;
+    if(mutexP == NULL) {
+        return;
+    }
 
-	dpl_mutex_pool_free((struct k_mutex *)handle);
+    MutexP_destruct(mutexP);
+    k_free(mutexP);
 }
 
-uintptr_t MutexP_lock(MutexP_Handle handle)
-{
-	unsigned int key = 0;
-	int retval;
-
-	retval = k_mutex_lock((struct k_mutex *)handle, K_FOREVER);
-	__ASSERT(retval == 0,
-		 "MutexP_lock: retval: %d\r\n", retval);
-
-	return ((uintptr_t)key);
-}
-
+/*
+ *  ======== MutexP_Params_init ========
+ */
 void MutexP_Params_init(MutexP_Params *params)
 {
-	params->callback = NULL;
+    if(params == NULL) {
+        return;
+    }
+    params->callback = NULL;
 }
 
+/*
+ *  ======== MutexP_lock ========
+ */
+uintptr_t MutexP_lock(MutexP_Handle handle)
+{
+    struct k_mutex* mutexP = (struct k_mutex*)handle;
+    if(mutexP == NULL) {
+        return 0;
+    }
+
+	k_mutex_lock(mutexP, K_FOREVER);
+
+    return 0;
+}
+
+/*
+ *  ======== MutexP_unlock ========
+ */
 void MutexP_unlock(MutexP_Handle handle, uintptr_t key)
 {
-	ARG_UNUSED(key);
+    struct k_mutex* mutexP = (struct k_mutex*)handle;
+    if(mutexP == NULL) {
+        return;
+    }
 
-	k_mutex_unlock((struct k_mutex *)handle);
+	k_mutex_unlock(mutexP);
+
+    return;
 }

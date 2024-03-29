@@ -7,7 +7,6 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/__assert.h>
-#include <kernel/zephyr/dpl/dpl.h>
 #include <ti/drivers/dpl/HwiP.h>
 
 #include <inc/hw_types.h>
